@@ -1,0 +1,211 @@
+Frameworks:
+    Lode
+    Time
+
+Concepts:
+    12x9 grid
+        - everything is grid based
+        - grids can have a wall on each side
+
+    4 players
+        - each player has a base on a grid
+
+    Game Modes
+        - default (4, 3, or 2 players)
+        - team battle (2 v 2, 2 v 1)
+
+Game.setState(stateName) - global func
+    - Delete's current state, instantiates given state, calls init on new state
+
+Game.update() - global func
+    - Holds main game loop
+
+Game.start() - global func
+    - basically wrapper for requestAnimFrame
+
+State - prototype
+    var:
+        Array:tracker
+            - stores all objects in the state
+            - all objects must have init, update, and render functions in prototype chain
+        String:name
+            - Identifies state
+
+    func:
+        init()
+        update(delta)
+            - loop through tracker and call update
+        render(gc)
+            - loop through tracker and call render
+        add(x)
+            - var type = x.type
+            - add x to tracker[type][]
+        get(type)
+            - get array x from tracker[type]
+
+Level - class - inherits State
+    var:
+        string:
+            name
+        number:
+            timer, totalTime
+            totalRounds
+        Grid:
+            grid
+
+    func:
+        init()
+            - State.prototype.init.apply(this, [])
+            - parse json or whatever
+            - initialize players
+                - set color, player number, base instance
+            - add all objects (base grid, arrow grid, moving entities) to the objects array.
+            - call Grid.init()
+
+        update(delta)
+            - State.prototype.update.apply(this, [delta])
+            - increment time by delta
+            - if time >= totalTime, onTimeComplete()
+
+        onTimerComplete()
+            - end round
+            - get player with greatest score and increment their roundsWon
+                - if that player's roundsWon value is equal to totalRounds then they win
+                    - queue victory screen or whatever
+                    - go back to main menu or to the current game mode screen
+
+Grid - prototype:
+    number:
+        rows
+        columns
+        boardWidth
+        boardHeight
+        cellWidth
+        cellHeight
+
+    func:
+        init([rows, columns], [boardWidth, boardHeight]):
+            - needs to be set whenever grid changes (should be on level init)
+            - Calculates cellWidth and cellHeight
+        render(gc):
+        getX(cellX):
+            - calculate pixel coords from x pos on grid
+        getY(cellY):
+            - calc pixel coords from y pos on grid
+        getXY(cellX, cellY):
+            - return object of pixel coords from grid pos
+
+
+BasicObject - prototype
+    var:
+        State: state
+    func:
+        constructor(State: state)
+            - adds this to state (calls state.add(this))
+
+Player - prototype - inherits from BasicObject
+    var:
+        number:
+            score
+            arrowCount
+            roundsWon
+        string: color
+        Base: base
+
+Base - prototype - inherits from BasicObject
+    var:
+        number:
+            cellX, cellY
+
+    func:
+        constructor(Level: level):
+            - pass level to parent constructor
+
+        setPosition(x, y):
+            - set position in grid coords
+
+Arrow Grid
+    - can either be left, up, right, down
+    - directs an entity in that direction if it is on that arrow grid
+    - there can only be set amount of arrows at a time for each player
+
+    class
+        var:
+            number:
+                x, y
+                //No width,height needed it'll automatically assume to be the size of a grid cell.
+
+            string:direction
+
+        func:
+            render()
+
+MovingEntity
+    - spawns in a starting direction based on the spawner
+    - when it reaches a wall in it's current grid and direction it will move with the following algorithm
+        destinationGrid = find a grid which:
+            - is not blocked by a wall on the current grid
+            - is not the previous grid the entity was at
+            - if two grids are found then randomize
+        move to the destinationGrid and continue moving in the direction relative to the destinationGrid and current grid.
+    - entity movement is simple so a good level design is crucial
+    - entity movement should actually not be grid based and more loosely based, this will make it look better on render. So to check what grid it is in we should get a function that'll return a grid when given an x,y.
+
+    class
+        var:
+            number:
+                speed
+                x, y
+                width, height
+
+            string: direction - should be one of these -> "up", "down", "left", "right"
+
+        func:
+            update()
+                - Move x, y according to direction and speed
+                - Check for collisions
+            onArrowCollide(ArrowGrid)
+                - set direction to the ArrowGrid direction
+            onBaseCollide() - will be overridden
+
+Coins - Inherits MovingEntity
+    - if a coin is on a player base grid then it increases that players score by 1
+    - there will be a random coin every once in a while which will trigger a game event
+
+    class
+        var:
+            number:worth
+
+        func:
+            onBaseCollide(BaseGrid)
+                - increment BaseGrid.player.score by this.worth
+
+Bombs - Inherits MovingEntity
+    - if a bomb is on a player base grid then it decreases that players score by an amount. (Not yet decided, possibly a percentage or just 50)
+
+    class
+        var:
+            number:worth
+
+        func:
+            onBaseCollide(BaseGrid)
+                - increment BaseGrid.player.score by this.worth
+                - do some visual effects that differ from coin
+
+Game Event
+    - when a game event starts there will be a random chance of 4 (maybe more later) possibiltes
+        - Coin Burst
+            - a huge amount of coins will start to spawn for a limited time
+        - Coin Euphoria
+            - an ever larger amount of coins will start and no bombs will spawn
+        - Bomb Attack
+            - coins will stop spawning and only bombs will spawn for a limited time
+        - Speed Up
+            - all moving entities will increase in speed for a limited time
+        - Freeze
+            - for a very brief time moving entities will freeze, this will allow you to replace your arrows
+        - Base Switch
+            - Base grid positions will be swapped with other player base grids.
+
+Round Over
+    - when the timer runs out the player with the most score gets a +1 out of 3, whoever reaches 3 wins the game if no one has reached three yet then a new round starts
